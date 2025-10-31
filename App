@@ -1,0 +1,2223 @@
+// App.js - MV SEGURANÇA PATRIMONIAL MOBILE
+// Gemini: VERSÃO FINAL COM FLUXO DE ENVIO AUTOMATIZADO DIRETO PARA EMAIL.
+// MUDANÇA CRÍTICA: O botão 'Enviar Diagnóstico' agora dispara o link mailto (E-mail) diretamente,
+// sem o modal de escolha (ContactOptionsModal foi removido).
+
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Linking, StyleSheet, Image, Platform, Alert, SafeAreaView, Modal, TextInput, Dimensions, KeyboardAvoidingView } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons'; 
+
+// SIMULAÇÃO DE STORAGE: Em produção, o AsyncStorage seria importado corretamente.
+// O código foi corrigido para usar apenas useState, eliminando a dependência externa.
+// import AsyncStorage from '@react-native-async-storage/async-storage'; 
+
+// --- 1. CONFIGURAÇÃO DE CORES E ESTILOS SIMPLIFICADOS ---
+
+const COLORS = {
+  primary: '#007cc5', // Azul MV
+  danger: '#d32f2f', // Vermelho Emergência
+  textDark: '#1f2937', // Cinza Escuro
+  textLight: '#ffffff', // Branco
+  backgroundLight: '#f9fafb', // Cinza Claro
+  success: '#4CAF50', // Verde para sucesso/WhatsApp
+  warning: '#FFC107', // Amarelo para força média
+};
+
+// Largura do menu lateral (75% da largura da tela - valor fixo para estabilidade)
+const SIDE_MENU_WIDTH = 300; 
+
+// Obtém a largura da tela para cálculos responsivos
+const { width: screenWidth } = Dimensions.get('window');
+
+// --- 2. COMPONENTE DE ÍCONE (AppIcon Simples) ---
+
+const AppIcon = ({ name, color = COLORS.textLight, size = 24, style }) => {
+  // Mapeamento de nomes de ícones para o React Native
+  const iconMap = {
+    home: 'home',
+    shield: 'shield-check-outline',
+    users: 'account-group-outline',
+    briefcase: 'briefcase-outline',
+    star: 'star-outline',
+    mail: 'email-send-outline',
+    menu: 'menu',
+    phone: 'phone',
+    close: 'close', 
+    // Novos ícones - CORRIGIDO O MAPEAMENTO
+    'human-greeting': 'account-tie', 
+    'monitor-cellphone': 'security', 
+    'file-search-outline': 'clipboard-list-outline',
+    'check-decagram': 'check-decagram-outline',
+    'map-marker-distance': 'map-marker-distance',
+    'account-multiple-check': 'account-multiple-check',
+    'map-marker-radius': 'map-marker-radius', 
+    'broom': 'broom', 
+    'tools': 'tools', 
+    'security-gate': 'security-network', 
+    'clipboard-text-outline': 'clipboard-list-outline', 
+    'truck-fast-outline': 'truck-fast-outline', 
+    'send-check': 'send-check', 
+    'whatsapp': 'whatsapp', 
+    'email-outline': 'email-outline', 
+    'robot': 'robot-outline', // Ícone Chat IA
+    'login': 'login', // Ícone Login
+    'lock-open-outline': 'lock-open-outline', // Ícone para login
+    'chevron-right': 'chevron-right',
+    'chevron-left': 'chevron-left',
+    // Ícones para Requisitos de Senha
+    'numeric-8-box-multiple-outline': 'numeric-8-box-multiple-outline', 
+    'numeric-8-box-multiple-outline-off': 'numeric-8-box-multiple-outline-off',
+    'format-letter-case-upper': 'format-letter-case-upper',
+    'format-letter-case-lower': 'format-letter-case-lower',
+    'pound': 'pound', 
+    'pound-off': 'pound-off',
+    // Ícones para Mostrar Senha
+    'eye': 'eye-outline', 
+    'eye-off': 'eye-off-outline',
+  };
+  
+  return (
+    <MaterialCommunityIcons 
+      name={iconMap[name] || 'help-circle-outline'} 
+      size={size} 
+      color={color} 
+      style={style} // Usando 'style' para receber estilos
+    />
+  );
+};
+
+// --- 3. COMPONENTE DE BOTÃO REUTILIZÁVEL (Button.jsx Simples) ---
+
+const Button = ({ texto, onPress, type = 'primary', iconName, fullWidth = false, customStyle, iconColor }) => { 
+  const bgColor = type === 'danger' ? COLORS.danger : COLORS.primary;
+  
+  const finalIconColor = iconColor || COLORS.textLight;
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.7} 
+      style={[
+        styles.buttonBase,
+        { backgroundColor: bgColor },
+        fullWidth && { width: '100%' },
+        customStyle, 
+      ]}
+    >
+      {iconName && <AppIcon name={iconName} size={18} color={finalIconColor} style={{ marginRight: 8 }} />}
+      <Text style={styles.buttonText}>{texto}</Text>
+    </TouchableOpacity>
+  );
+};
+
+// --- Segmented Control Horizontal (Mantido para opções curtas) ---
+
+const SegmentedControl = ({ options, selectedValue, onValueChange }) => {
+  // Calcula a largura de cada botão dinamicamente
+  const optionWidth = (screenWidth - (20 * 2) - (2 * (options.length -1))) / options.length; 
+
+  return (
+    <View style={styles.segmentedControlContainer}>
+      {options.map((option) => {
+        const isSelected = option.value === selectedValue;
+        return (
+          <TouchableOpacity
+            key={option.value}
+            activeOpacity={0.7} 
+            style={[
+              styles.segmentedControlOption,
+              { width: optionWidth -2 }, 
+              isSelected && styles.segmentedControlSelected,
+            ]}
+            onPress={() => onValueChange(option.value)}
+          >
+            <Text 
+              style={[
+                styles.segmentedControlText,
+                { color: isSelected ? COLORS.textLight : COLORS.primary }
+              ]}
+              numberOfLines={1} 
+              ellipsizeMode="tail" 
+            >
+              {option.label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+};
+
+// --- NOVO COMPONENTE: SELEÇÃO SEGMENTADA VERTICAL (Para opções longas) ---
+
+const VerticalSegmentedControl = ({ options, selectedValue, onValueChange }) => {
+  return (
+    <View style={styles.verticalSegmentedControlContainer}>
+      {options.map((option) => {
+        const isSelected = option.value === selectedValue;
+        return (
+          <TouchableOpacity
+            key={option.value}
+            activeOpacity={0.7} 
+            style={[
+              styles.verticalSegmentedControlOption,
+              isSelected && styles.verticalSegmentedControlSelected,
+            ]}
+            onPress={() => onValueChange(option.value)}
+          >
+            <Text 
+              style={[
+                styles.verticalSegmentedControlText,
+                { color: isSelected ? COLORS.textLight : COLORS.primary }
+              ]}
+            >
+              {option.label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+};
+
+// --- NOVO COMPONENTE: MEDIDOR DE FORÇA DE SENHA ---
+
+const PasswordStrengthIndicator = ({ password }) => {
+    // 1. Definição das Regras de Força (Baseada nas exigências da empresa)
+    const MIN_LENGTH = 8; // Aumentado para 8 para melhor segurança
+    const hasUpperCase = /[A-Z]/.test(password);
+    const hasSymbol = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+    const hasMinLength = password.length >= MIN_LENGTH;
+
+    let strength = 0;
+    if (hasMinLength) strength++;
+    if (hasUpperCase) strength++;
+    if (hasSymbol) strength++;
+
+    let barColor = COLORS.danger;
+    let barWidth = "33%";
+    let text = "Fraca";
+    
+    if (strength === 1) {
+        barWidth = "33%";
+        barColor = COLORS.danger;
+        text = "Fraca";
+    } else if (strength === 2) {
+        barWidth = "66%";
+        barColor = COLORS.warning;
+        text = "Média";
+    } else if (strength === 3) {
+        barWidth = "100%";
+        barColor = COLORS.success;
+        text = "Forte";
+    }
+    
+    // Condição para mostrar o indicador apenas se o usuário tiver começado a digitar
+    if (password.length === 0) {
+        return null;
+    }
+
+    // Usando AppIcon para os requisitos para um visual mais vivo e consistente
+    const renderRequirement = (condition, label, iconNameOn, iconNameOff) => (
+        <View style={styles.requirementItem}>
+            <AppIcon 
+                name={condition ? iconNameOn : iconNameOff} 
+                color={condition ? COLORS.success : COLORS.danger} 
+                size={18} 
+                style={{marginRight: 5, color: condition ? COLORS.success : COLORS.danger}} // Aplicando cor diretamente
+            />
+            <Text style={[styles.requirementText, {color: condition ? COLORS.success : COLORS.textDark}]}>
+                {label}
+            </Text>
+        </View>
+    );
+
+    return (
+        <View style={styles.passwordIndicatorContainer}>
+            <View style={styles.passwordBarBackground}> {/* Container da barra de progresso */}
+                <View style={[styles.passwordBar, { width: barWidth, backgroundColor: barColor }]} />
+            </View>
+            
+            {/* O TEXTO DE FORÇA AGORA FICA ABAIXO E ALINHADO À DIREITA */}
+            {password.length > 0 && ( 
+                <Text style={[styles.passwordIndicatorText, { color: barColor }]}>
+                    Força: {text}
+                </Text>
+            )}
+
+            <View style={styles.passwordRequirements}>
+                {/* 1. COMPRIMENTO */}
+                {renderRequirement(hasMinLength, `${MIN_LENGTH}+ caracteres`, 'numeric-8-box-multiple-outline', 'numeric-8-box-multiple-outline-off')}
+                
+                {/* 2. LETRA MAIÚSCULA */}
+                {renderRequirement(hasUpperCase, 'Letra Maiúscula', 'format-letter-case-upper', 'format-letter-case-lower')}
+                
+                {/* 3. SÍMBOLO */}
+                {renderRequirement(hasSymbol, 'Símbolo (!@#$)', 'pound', 'pound-off')}
+                
+                {/* Adicionando um item vazio para manter o alinhamento em 2 colunas */}
+                <View style={styles.requirementItem} /> 
+            </View>
+        </View>
+    );
+};
+
+
+// --- NOVO COMPONENTE: MODAL DE OPÇÕES DE CONTATO (REMOVIDO) ---
+// O ContactOptionsModal foi removido para implementar o disparo direto.
+
+
+// --- NOVO COMPONENTE: MODAL DE CONTRATAÇÃO RÁPIDA ---
+
+const QuickHireModal = ({ isVisible, onClose, serviceName }) => {
+  const [nome, setNome] = useState('');
+  const [contato, setContato] = useState('');
+  const [cidade, setCidade] = useState('');
+
+  const handleQuickHire = () => {
+    if (!nome || !contato || !cidade) {
+      Alert.alert("Erro", "Por favor, preencha nome, contato e cidade para prosseguir.");
+      return;
+    }
+    Alert.alert(
+      "Solicitação Enviada!",
+      `Seu interesse no serviço de ${serviceName} foi registrado. Nosso consultor entrará em contato em breve.`,
+      [{ text: "OK", onPress: onClose }]
+    );
+  };
+
+  return (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={isVisible}
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalCenteredView}>
+        <View style={styles.modalView}>
+          <TouchableOpacity onPress={onClose} style={styles.modalCloseButton}>
+            <AppIcon name="close" color={COLORS.textDark} size={24} style={{}} />
+          </TouchableOpacity>
+          <Text style={styles.modalTitle}>Contratação Rápida</Text>
+          <Text style={styles.modalSubtitle}>Serviço: <Text style={{fontWeight: 'bold', color: COLORS.primary}}>{serviceName}</Text></Text>
+
+          <Text style={styles.inputLabel}>Seu Nome:</Text>
+          <TextInput
+            style={styles.inputModal}
+            placeholder="Nome Completo"
+            value={nome}
+            onChangeText={setNome}
+          />
+          <Text style={styles.inputLabel}>E-mail / Telefone:</Text>
+          <TextInput
+            style={styles.inputModal}
+            placeholder="Contato Preferencial"
+            value={contato}
+            onChangeText={setContato}
+            keyboardType="email-address"
+          />
+          <Text style={styles.inputLabel}>Sua Cidade:</Text>
+          <TextInput
+            style={styles.inputModal}
+            placeholder="Ex: Ribeirão Preto"
+            value={cidade}
+            onChangeText={setCidade}
+          />
+
+          <Button
+            texto="Contratar e Agendar Contato"
+            onPress={handleQuickHire}
+            fullWidth={true}
+            customStyle={{ marginTop: 20, backgroundColor: COLORS.primary }}
+          />
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+// --- NOVO MODAL: CONFIRMAÇÃO DE LOGOUT ---
+const LogoutConfirmModal = ({ isVisible, onClose, onConfirm }) => {
+    return (
+        <Modal
+            animationType="fade"
+            transparent={true}
+            visible={isVisible}
+            onRequestClose={onClose}
+        >
+            <View style={styles.modalCenteredView}>
+                <View style={styles.modalView}>
+                    <Text style={styles.modalTitle}>Sair do Portal?</Text> {/* TEXTO ALTERADO */}
+                    <Text style={styles.modalSubtitle}>
+                        Você tem certeza que deseja finalizar sua sessão?
+                    </Text>
+
+                    <View style={styles.modalButtonRow}>
+                        <Button
+                            texto="Não, Ficar"
+                            onPress={onClose}
+                            customStyle={{ flex: 1, marginRight: 10, backgroundColor: COLORS.textDark }}
+                        />
+                        <Button
+                            texto="Sim, Sair"
+                            onPress={() => {
+                                onConfirm();
+                                onClose();
+                            }}
+                            type="danger"
+                            customStyle={{ flex: 1, backgroundColor: COLORS.danger }}
+                        />
+                    </View>
+                </View>
+            </View>
+        </Modal>
+    );
+};
+
+
+// --- 4. COMPONENTE MODAL DE MENU LATERAL ---
+
+const SideMenuModal = ({ isVisible, onClose, onNavigate, isLoggedIn, onLogout }) => { 
+  const [isLogoutModalVisible, setIsLogoutModalVisible] = useState(false); // Novo estado
+  
+  const handleNavigation = (screenName) => {
+    onNavigate(screenName);
+    onClose();
+  };
+  
+  const handleEmergencyCall = () => {
+    Linking.openURL('tel:+5511992207120');
+    onClose();
+  };
+
+  // Funções de Ação
+  const getAction = (item) => {
+      if (item.name === 'Sair / Logout') {
+          return () => setIsLogoutModalVisible(true); // Abre o modal de confirmação
+      }
+      return item.action;
+  };
+
+  const menuItems = [
+    { name: 'Home', screen: 'Home', icon: 'home', action: () => handleNavigation('Home') },
+    { name: 'Serviços', screen: 'Servicos', icon: 'shield', action: () => handleNavigation('Servicos') },
+    { name: 'Avaliação de Risco', screen: 'Avaliacao', icon: 'clipboard-text-outline', action: () => handleNavigation('Avaliacao') }, 
+    { name: 'Rastreio de Serviços', screen: 'Rastreio', icon: 'truck-fast-outline', action: () => handleNavigation('Rastreio') }, 
+    { name: 'Chat IA', screen: 'ChatBot', icon: 'robot', action: () => handleNavigation('ChatBot') }, // NOVO ITEM: ChatBot
+    { name: 'Carreiras', screen: 'Carreiras', icon: 'briefcase', action: () => handleNavigation('Carreiras') },
+    // Item de Login/Logout condicional
+    isLoggedIn 
+        ? { name: 'Sair / Logout', icon: 'login', action: onLogout, isDanger: true } // Ação será tratada pela função getAction
+        : { name: 'Login / Cadastre-se', icon: 'login', action: () => handleNavigation('Login') }, // TEXTO ALTERADO
+    // Item de Emergência
+    { name: 'Emergência', icon: 'phone', action: handleEmergencyCall, isDanger: true },
+  ].filter(item => item); // Filtra itens nulos
+
+  return (
+    <>
+    <Modal
+      animationType="fade" 
+      transparent={true}
+      visible={isVisible}
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity 
+        style={styles.modalOverlay} 
+        activeOpacity={1} 
+        onPress={onClose} 
+      >
+        <SafeAreaView style={styles.sideMenuWrapper}>
+          <View 
+            style={styles.sideMenu}
+            onStartShouldSetResponder={() => true} 
+          >
+            
+            {/* Título do Menu */}
+            <View style={styles.sideMenuHeader}>
+                <View style={styles.sideMenuTitleContainer}> 
+                    <AppIcon name="shield" color={COLORS.primary} size={30} style={{ marginRight: 8 }} />
+                    <Text style={styles.sideMenuTitle}>MV Segurança Patrimonial</Text>
+                </View>
+                <TouchableOpacity onPress={onClose} style={styles.sideMenuCloseButton}>
+                    <AppIcon name="close" color={COLORS.textDark} size={28} />
+                </TouchableOpacity>
+            </View>
+
+            {/* Itens do Menu */}
+            {menuItems.map((item, index) => (
+              <TouchableOpacity
+                key={index}
+                activeOpacity={0.7} 
+                style={[
+                    styles.menuItem, 
+                    item.isDanger && { backgroundColor: '#fcdada' } 
+                ]}
+                onPress={getAction(item)} // Usa a função getAction
+              >
+                <AppIcon 
+                    name={item.icon} 
+                    color={item.isDanger ? COLORS.danger : COLORS.textDark} 
+                    size={22} 
+                    style={{marginRight: 15}} 
+                />
+                <Text style={[
+                    styles.menuItemText, 
+                    item.isDanger && { color: COLORS.danger, fontWeight: 'bold' }
+                ]}>
+                    {item.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+
+          </View>
+        </SafeAreaView>
+      </TouchableOpacity>
+    </Modal>
+
+    {/* NOVO MODAL DE CONFIRMAÇÃO */}
+    <LogoutConfirmModal 
+        isVisible={isLogoutModalVisible} 
+        onClose={() => setIsLogoutModalVisible(false)} 
+        onConfirm={onLogout} // Executa o logout se o usuário confirmar
+    />
+    </>
+  );
+};
+
+
+// --- 5. COMPONENTE DE CABEÇALHO (Header.jsx) ---
+
+const Header = ({ onNavigate, onOpenMenu }) => ( 
+  <SafeAreaView style={styles.safeAreaHeader}>
+    <View style={styles.header}>
+      
+      {/* Botão de Menu Hamburguer (Canto Esquerdo) */}
+      <TouchableOpacity onPress={onOpenMenu} style={styles.menuIconContainer}>
+        <AppIcon name="menu" color={COLORS.primary} size={30} />
+      </TouchableOpacity>
+      
+      {/* Logo Centralizada e Estilizada */}
+      <TouchableOpacity onPress={() => onNavigate('Home')} style={styles.logoContainer}>
+        {/* REINSERIDO: LOGO DA EMPRESA USANDO APENAS AppIcon COMO REPRESENTAÇÃO */}
+        <AppIcon 
+          name="shield" // Ícone de escudo como representação da logo
+          color={COLORS.primary} 
+          size={40} 
+          style={styles.headerLogo} // Estilo para controle de tamanho
+        />
+        <Text style={styles.logoTextHeader}>MV Segurança Patrimonial</Text>
+      </TouchableOpacity>
+      
+      {/* Container Vazio para Balancear (Antigo Botão de Emergência) */}
+      <View style={styles.headerButtonsPlaceholder}>
+        {/* Este View vazio mantém o balanceamento do layout flexível */}
+      </View>
+    </View>
+  </SafeAreaView>
+);
+
+// --- 6. COMPONENTE DE RODAPÉ (Footer) ---
+
+const Footer = () => (
+  <View style={styles.footer}>
+    <Text style={styles.footerText}>
+      © 2025 Este site foi desenvolvido exclusivamente como projeto de demonstração para a empresa MV Segurança Patrimonial. 
+      Todos os dados, conteúdos e informações apresentados — exceto o nome e o logotipo da empresa — são inteiramente fictícios 
+      e utilizados apenas para fins ilustrativos.
+    </Text>
+  </View>
+);
+
+// --- FUNÇÕES DE MÁSCARA ---
+
+// Máscara de CPF: XXX.XXX.XXX-XX
+const maskCPF = (value) => {
+    return value
+        .replace(/\D/g, '') // Remove todos os caracteres não-dígitos
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+        .replace(/(-\d{2})\d+?$/, '$1'); // Limita a 11 dígitos
+};
+
+// Máscara de Telefone: (XX) XXXXX-XXXX
+const maskPhone = (value) => {
+    return value
+        .replace(/\D/g, '') // Remove todos os caracteres não-dígitos
+        .replace(/(\d{2})(\d)/, '($1) $2')
+        .replace(/(\d{5})(\d)/, '$1-$2')
+        .replace(/(-\d{4})\d+?$/, '$1'); // Limita a 11 dígitos
+};
+
+
+// --- 7. PÁGINA: CARREIRAS (index.jsx) ---
+const CarreirasScreen = ({ onNavigate }) => {
+    // ... (Mantido o código anterior, com ajuste da chamada para o email/telefone)
+    const motivacionais = [
+        { titulo: 'Quem Somos', texto: 'A MV é reconhecida pela excelência, ética e inovação.', icone: 'users' },
+        { titulo: '8 Anos de Sucesso', texto: 'Consolidamos nossa experiência no mercado. Oferecemos estabilidade e crescimento.', icone: 'briefcase' },
+        { titulo: 'Por Que Fazer Parte?', texto: 'Aqui, você encontra salários competitivos e benefícios atrativos.', icone: 'star' },
+      ];
+    
+      const handleSendCurriculum = () => {
+        const rhEmail = 'leonardogarbellini@gmail.com';
+        const rhPhone = '+5516993863222';
+        
+        const emailSubject = 'Candidatura MV Segurança Patrimonial';
+        const emailBody = 'Prezado RH, segue meu currículo para avaliação na MV Segurança Patrimonial.';
+        
+        Linking.openURL(`mailto:${rhEmail}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`)
+          .catch(() => {
+            Alert.alert(
+              "Erro ao Abrir Email",
+              `Não foi possível abrir o aplicativo de e-mail. Por favor, envie seu currículo diretamente para ${rhEmail} ou ligue para ${rhPhone}.`,
+              [{ text: "OK" }]
+            );
+          });
+      };
+    
+      return (
+        <ScrollView style={styles.screenContainer}>
+          {/* Seção Hero */}
+          <View style={styles.heroSection}>
+            <Text style={styles.heroTitle}>Construa Seu Futuro Conosco</Text>
+            <Text style={styles.heroSubtitle}>Junte-se ao time MV.</Text>
+            
+            <Button
+              texto="Enviar Currículo"
+              iconName="send-check" 
+              onPress={handleSendCurriculum} 
+              fullWidth={true}
+              type="primary"
+              customStyle={{ marginTop: 20 }}
+            />
+          </View>
+    
+          {/* Seção Motivacional */}
+          <View style={styles.contentSection}>
+            <Text style={styles.contentTitle}>Nossos Pilares</Text>
+            
+            {motivacionais.map((item, index) => (
+              <View key={index} style={styles.card}>
+                <AppIcon name={item.icone} color={COLORS.primary} size={30} />
+                <Text style={styles.cardTitle}>{item.titulo}</Text>
+                <Text style={styles.cardText}>{item.texto}</Text>
+              </View>
+            ))}
+            
+            <View style={{ marginTop: 30 }}>
+              <Button
+                texto="Voltar para Home"
+                onPress={() => onNavigate('Home')}
+                fullWidth={true}
+              />
+            </View>
+          </View>
+        </ScrollView>
+      );
+};
+
+
+// --- 8. NOVA PÁGINA: CHATBOT IA (ChatBotScreen) ---
+
+const ChatBotScreen = ({ onNavigate }) => {
+    // URL da API do Google Gemini
+    // NOTA: Em um ambiente real, você usaria uma chave segura. No ambiente local/Expo, você pode usar uma chave diretamente para testes.
+    const apiKey = ""; // <--- COLOQUE AQUI SUA CHAVE DA API GEMINI PARA TESTES LOCAIS!
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+    const [messages, setMessages] = useState([
+        { text: "Olá! Sou o **MV AI Consultor**. Estou aqui para responder dúvidas sobre segurança patrimonial, nossos pacotes e o processo de agendamento. Como posso ajudar?", sender: 'ai' }
+    ]);
+    const [input, setInput] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+
+    // Estrutura de prompt para dar a persona ao Chatbot
+    const systemInstruction = {
+        parts: [{
+            text: "Você é o 'MV AI Consultor', um chatbot especializado em segurança patrimonial para a empresa MV Segurança Patrimonial. Seu foco é Ribeirão Preto e Serrana. Sua meta é fornecer informações concisas, profissionais e precisas. Se o usuário perguntar sobre preços ou agendamento de serviços, você deve direcioná-lo a preencher a 'Avaliação de Risco Gratuita' (mencione a seção no menu) ou a entrar em contato com um consultor humano para uma cotação exata."
+        }]
+    };
+
+    const callGeminiAPI = async (userMessage) => {
+        setIsLoading(true);
+        
+        // Formatar o histórico da conversa (incluindo a nova mensagem do usuário)
+        const contents = messages.map(msg => ({
+            role: msg.sender === 'user' ? 'user' : 'model',
+            parts: [{ text: msg.text }]
+        })).concat([{ role: 'user', parts: [{ text: userMessage }] }]);
+
+        const payload = {
+            contents: contents,
+            systemInstruction: systemInstruction,
+            config: {
+                temperature: 0.5,
+                maxOutputTokens: 200,
+            }
+        };
+
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                throw new Error(`Erro de API: ${response.status}`);
+            }
+
+            const result = await response.json();
+            const aiResponse = result.candidates?.[0]?.content?.parts?.[0]?.text || "Desculpe, não consegui processar a sua pergunta no momento.";
+
+            setMessages(prev => [...prev, { text: aiResponse, sender: 'ai' }]);
+        } catch (error) {
+            console.error("Erro na chamada Gemini:", error);
+            setMessages(prev => [...prev, { 
+                text: "Desculpe, o serviço de consultoria AI está indisponível. Por favor, tente a Avaliação de Risco no menu ou ligue para nossa central.", 
+                sender: 'ai' 
+            }]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleSend = () => {
+        if (input.trim() === '' || isLoading) return;
+
+        const userMessage = input.trim();
+        setMessages(prev => [...prev, { text: userMessage, sender: 'user' }]);
+        setInput('');
+
+        // Dispara a chamada da IA
+        callGeminiAPI(userMessage);
+    };
+
+    return (
+        <KeyboardAvoidingView 
+            style={styles.screenContainer} 
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
+        >
+            <View style={styles.chatHeader}>
+                <AppIcon name="robot" color={COLORS.textLight} size={28} style={{marginRight: 10}} />
+                <Text style={styles.chatTitle}>MV AI Consultor</Text>
+            </View>
+
+            <ScrollView 
+                style={styles.chatContent}
+                contentContainerStyle={{padding: 10}}
+                ref={ref => { this.scrollView = ref; }}
+                onContentSizeChange={() => this.scrollView.scrollToEnd({ animated: true })}
+            >
+                {messages.map((msg, index) => (
+                    <View key={index} style={[
+                        styles.messageContainer, 
+                        msg.sender === 'user' ? styles.userMessageContainer : styles.aiMessageContainer
+                    ]}>
+                        <Text style={msg.sender === 'user' ? styles.userMessageText : styles.aiMessageText}>
+                            {msg.text}
+                        </Text>
+                    </View>
+                ))}
+                {isLoading && (
+                    <View style={[styles.messageContainer, styles.aiMessageContainer]}>
+                        <Text style={styles.aiMessageText}>Digitando...</Text>
+                    </View>
+                )}
+            </ScrollView>
+
+            <View style={styles.chatInputContainer}>
+                <TextInput
+                    style={styles.chatInput}
+                    value={input}
+                    onChangeText={setInput}
+                    placeholder="Pergunte sobre serviços ou segurança..."
+                    placeholderTextColor="#999"
+                    onSubmitEditing={handleSend}
+                    editable={!isLoading}
+                />
+                <TouchableOpacity onPress={handleSend} style={styles.chatSendButton} disabled={isLoading}>
+                    <MaterialCommunityIcons name="send" size={24} color={COLORS.textDark} />
+                </TouchableOpacity>
+            </View>
+        </KeyboardAvoidingView>
+    );
+};
+
+
+// --- 9. PÁGINA DE LOGIN / CADASTRO (LoginScreen) ---
+
+const LoginScreen = ({ onNavigate, onLogin }) => {
+    const [isLogin, setIsLogin] = useState(true);
+    const [step, setStep] = useState(1); // 1: Dados Pessoais, 2: Senhas
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState(''); // NOVO
+    const [name, setName] = useState('');
+    const [phone, setPhone] = useState(''); // NOVO
+    const [cpf, setCpf] = useState(''); // NOVO
+    
+    // Novo Estado para Mostrar/Ocultar Senhas
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+    // Função de checagem de força de senha (usada na Etapa 2)
+    const checkPasswordStrength = (pwd) => {
+        const MIN_LENGTH = 8;
+        let strength = 0;
+        
+        // Critério 1: Comprimento
+        if (pwd.length >= MIN_LENGTH) strength++;
+        // Critério 2: Letra Maiúscula
+        if (/[A-Z]/.test(pwd)) strength++;
+        // Critério 3: Símbolo
+        if (/[!@#$%^&*(),.?":{}|<>]/.test(pwd)) strength++;
+        
+        return {
+            strength,
+            hasMinLength: pwd.length >= MIN_LENGTH,
+            hasUpperCase: /[A-Z]/.test(pwd),
+            hasSymbol: /[!@#$%^&*(),.?":{}|<>]/.test(pwd)
+        };
+    };
+
+    const strengthResult = checkPasswordStrength(password);
+
+    const handleAuth = async () => {
+        if (isLogin) {
+            // Lógica de Login (Simulada)
+            if (!email || !password) {
+                Alert.alert("Erro", "Preencha e-mail e senha.");
+                return;
+            }
+            // SIMULAÇÃO: Se o email e senha forem "teste@mv.com" e "SenhaForte1!", o login é OK.
+            if (email === "teste@mv.com" && password === "SenhaForte1!") {
+                onLogin(); 
+                Alert.alert("Sucesso", "Login realizado com sucesso! Bem-vindo ao Portal."); // TEXTO ALTERADO
+            } else {
+                Alert.alert("Erro de Login", "E-mail ou senha incorretos. Use: teste@mv.com / SenhaForte1!");
+            }
+        } else {
+            // Lógica de Cadastro (Final)
+            if (step === 1) {
+                // Validação da Etapa 1
+                if (!name || !email || !cpf || !phone) {
+                    Alert.alert("Erro", "Preencha todos os campos da Etapa 1 (Nome, Email, CPF, Telefone).");
+                    return;
+                }
+                // Simulação de validação simples
+                if (cpf.length < 11 || phone.replace(/\D/g, '').length < 10) { // Validação do telefone/CPF
+                    Alert.alert("Erro", "CPF e Telefone devem ser válidos (somente números).");
+                    return;
+                }
+                setStep(2); // Avança para a Etapa 2 (Senhas)
+                return;
+            }
+
+            if (step === 2) {
+                // Validação da Etapa 2 (REGRAS DE SEGURANÇA AVANÇADAS)
+                if (strengthResult.strength < 3) { // Exige FORTE (todos os 3 critérios)
+                    Alert.alert("Erro", "A senha é muito fraca. Ela deve ter no mínimo 8 caracteres, uma letra maiúscula e um símbolo.");
+                    return;
+                }
+                if (password !== confirmPassword) {
+                    Alert.alert("Erro", "A senha e a confirmação de senha não coincidem.");
+                    return;
+                }
+                
+                // SIMULAÇÃO: Finaliza o Cadastro
+                // const userKey = `user_${email}`;
+                // const newUser = { email, password, name, phone, cpf };
+                // await AsyncStorage.setItem(userKey, JSON.stringify(newUser));
+                onLogin(); 
+                Alert.alert("Sucesso", "Cadastro realizado com sucesso! Você já está logado no Portal."); // TEXTO ALTERADO
+            }
+        }
+    };
+
+    const renderLoginForm = () => (
+        <>
+            <TextInput
+                style={styles.input}
+                placeholder="E-mail"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+            />
+            <TextInput
+                style={styles.input}
+                placeholder="Senha"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+            />
+            <Button
+                texto="Acessar Minha Conta" // TEXTO ALTERADO
+                onPress={handleAuth}
+                fullWidth={true}
+                customStyle={{ marginTop: 20, backgroundColor: COLORS.primary }}
+            />
+        </>
+    );
+
+    const renderCadastroStep1 = () => (
+        <>
+            <TextInput
+                style={styles.input}
+                placeholder="Nome Completo" // REMOVIDO "(Obrigatório)"
+                value={name}
+                onChangeText={setName}
+            />
+            <TextInput
+                style={styles.input}
+                placeholder="E-mail" // REMOVIDO "(Obrigatório)"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+            />
+            <TextInput
+                style={styles.input}
+                placeholder="CPF" // MÁSCARA APLICADA
+                value={cpf}
+                onChangeText={(text) => setCpf(maskCPF(text))} // Aplica a máscara de CPF
+                keyboardType="numeric"
+                maxLength={14} // Limite de 14 caracteres (formato XXX.XXX.XXX-XX)
+            />
+            <TextInput
+                style={styles.input}
+                placeholder="Telefone (com DDD)" // MÁSCARA APLICADA
+                value={phone}
+                onChangeText={(text) => setPhone(maskPhone(text))} // Aplica a máscara de Telefone
+                keyboardType="phone-pad"
+                maxLength={15} // Limite de 15 caracteres (formato (XX) XXXXX-XXXX)
+            />
+            <Button
+                texto="Continuar"
+                onPress={handleAuth} // Chama handleAuth para validar e avançar
+                fullWidth={true}
+                customStyle={{ marginTop: 20, backgroundColor: COLORS.primary }}
+            />
+            <TouchableOpacity onPress={() => setIsLogin(true)} style={{marginTop: 15}}>
+                <Text style={styles.toggleText}>Cancelar Cadastro e Fazer Login</Text>
+            </TouchableOpacity>
+        </>
+    );
+
+    const renderCadastroStep2 = () => (
+        <>
+            <View style={styles.inputGroup}>
+                <TextInput
+                    style={styles.inputWithIcon} // Usando estilo sem padding extra
+                    placeholder="Senha (Mín. 8 Caract.)" 
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword} // Controlado pelo estado
+                />
+                <TouchableOpacity 
+                    onPress={() => setShowPassword(!showPassword)} 
+                    style={styles.eyeButton}
+                >
+                    <MaterialCommunityIcons 
+                        name={showPassword ? 'eye-off' : 'eye'} 
+                        size={24} 
+                        color={COLORS.textDark} 
+                    />
+                </TouchableOpacity>
+            </View>
+            
+            {/* NOVO: INDICADOR DE FORÇA DE SENHA */}
+            <PasswordStrengthIndicator password={password} />
+
+            <View style={styles.inputGroup}>
+                <TextInput
+                    style={[
+                        styles.inputWithIcon, 
+                        // NOVIDADE: Borda vermelha se a senha for diferente e não vazia
+                        (confirmPassword.length > 0 && password !== confirmPassword) && 
+                        {borderColor: COLORS.danger, borderWidth: 2}
+                    ]}
+                    placeholder="Confirme a Senha" 
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    secureTextEntry={!showConfirmPassword} // Controlado pelo estado
+                />
+                <TouchableOpacity 
+                    onPress={() => setShowConfirmPassword(!showConfirmPassword)} 
+                    style={styles.eyeButton}
+                >
+                    <MaterialCommunityIcons 
+                        name={showConfirmPassword ? 'eye-off' : 'eye'} 
+                        size={24} 
+                        color={COLORS.textDark} 
+                    />
+                </TouchableOpacity>
+            </View>
+            
+            {/* NOVIDADE: Mensagem de erro se as senhas não coincidirem */}
+            {confirmPassword.length > 0 && password !== confirmPassword && (
+                <Text style={styles.errorText}>
+                    As senhas digitadas não coincidem.
+                </Text>
+            )}
+
+            <Button
+                texto="Finalizar Cadastro e Entrar"
+                onPress={handleAuth} // Chama handleAuth para validar e finalizar
+                iconName="check-decagram"
+                fullWidth={true}
+                customStyle={{ marginTop: 20, backgroundColor: COLORS.success }}
+            />
+            <TouchableOpacity onPress={() => setStep(1)} style={{marginTop: 15, flexDirection: 'row', alignItems: 'center'}}>
+                <AppIcon name="chevron-left" color={COLORS.primary} size={20} style={{marginRight: 5}} />
+                <Text style={styles.toggleText}>Voltar para a Etapa 1</Text>
+            </TouchableOpacity>
+        </>
+    );
+
+    const renderContent = () => {
+        if (isLogin) {
+            return renderLoginForm();
+        } else {
+            // Renderiza o passo atual do cadastro
+            return step === 1 ? renderCadastroStep1() : renderCadastroStep2();
+        }
+    };
+
+    const getTitle = () => {
+        if (isLogin) return "Acesso do Cliente";
+        return step === 1 ? "Novo Cadastro (1/2)" : "Definir Senha (2/2)";
+    };
+
+    return (
+        <ScrollView style={styles.screenContainer} contentContainerStyle={{alignItems: 'center', padding: 20}}>
+            <View style={styles.authContainer}>
+                <Text style={styles.authTitle}>{getTitle()}</Text>
+                <Text style={styles.authSubtitle}>
+                    {isLogin 
+                        ? "Gerencie seus serviços, faturas e rastreie seus pedidos."
+                        : "Precisamos de alguns dados para criar sua conta segura."
+                    }
+                </Text>
+
+                <AppIcon name="lock-open-outline" color={COLORS.primary} size={60} style={{marginBottom: 20}} />
+
+                {renderContent()}
+
+                {isLogin && (
+                    <TouchableOpacity onPress={() => { setIsLogin(false); setStep(1); }} style={{marginTop: 15}}>
+                        <Text style={styles.toggleText}>Não tem conta? Cadastre-se agora!</Text>
+                    </TouchableOpacity>
+                )}
+
+                <View style={{ marginTop: 30 }}>
+                    <Button
+                        texto="Voltar para Home"
+                        onPress={() => onNavigate('Home')}
+                        fullWidth={true}
+                        customStyle={{ backgroundColor: COLORS.textDark }}
+                    />
+                </View>
+            </View>
+        </ScrollView>
+    );
+};
+
+
+// --- 10. PÁGINA DE SERVIÇOS (ServicosScreen) - REESTRUTURADA PARA PACOTES ---
+
+const PacotesServicos = ({ onOpenModal }) => {
+    // Pacotes simulados com preços fictícios
+    const pacotes = [
+        {
+            nome: "Básico Residencial",
+            preco: "R$ 699,00/mês",
+            icone: "monitor-cellphone",
+            descricao: "Monitoramento 24h por CFTV e alarmes inteligentes. Ideal para condomínios de baixo porte.",
+            servicos: ["Central 24h", "Monitoramento Remoto", "Ronda Virtual"]
+        },
+        {
+            nome: "Essencial Empresarial",
+            preco: "R$ 1.990,00/mês",
+            icone: "security-gate",
+            descricao: "Vigilância in loco (diurna ou noturna) e serviço de Portaria. Foco em controle de acesso e prevenção.",
+            servicos: ["Vigilante Treinado (12h)", "Portaria Humanizada", "Controle Biométrico"]
+        },
+        {
+            nome: "Master Completo",
+            preco: "Sob Consulta",
+            icone: "check-decagram",
+            descricao: "Solução completa: Vigilância, Portaria, Asseio, Manutenção e Consultoria contínua. Para grandes complexos.",
+            servicos: ["Todos os Serviços", "Manutenção Predial", "Consultoria Mensal", "Agente de Asseio"]
+        }
+    ];
+
+    return (
+        <View style={styles.pacotesContainer}>
+            <Text style={styles.contentTitle}>Nossos Pacotes de Segurança (Mensal)</Text>
+
+            {pacotes.map((pacote, index) => (
+                <View key={index} style={styles.paceteCard}>
+                    <AppIcon name={pacote.icone} color={COLORS.primary} size={40} style={{marginBottom: 10}} />
+                    <Text style={styles.pacoteNome}>{pacote.nome}</Text>
+                    <Text style={styles.pacotePreco}>{pacote.preco}</Text>
+                    <Text style={styles.pacoteDescricao}>{pacote.descricao}</Text>
+
+                    <View style={styles.servicosLista}>
+                        {pacote.servicos.map((servico, i) => (
+                            <View key={i} style={styles.servicoItem}>
+                                <MaterialCommunityIcons name="check" size={16} color={COLORS.success} />
+                                <Text style={styles.servicoTexto}>{servico}</Text>
+                            </View>
+                        ))}
+                    </View>
+
+                    <Button
+                        texto={pacote.preco === "Sob Consulta" ? "Solicitar Proposta" : "Contratar Pacote"}
+                        onPress={() => onOpenModal(pacote.nome)}
+                        fullWidth={true}
+                        customStyle={{ marginTop: 20, backgroundColor: COLORS.primary }}
+                    />
+                </View>
+            ))}
+        </View>
+    );
+};
+
+const ServicosScreen = ({ onNavigate }) => {
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedService, setSelectedService] = useState('');
+
+  const handleOpenModal = (serviceName) => {
+    setSelectedService(serviceName);
+    setModalVisible(true);
+  };
+
+  return (
+    <ScrollView style={styles.screenContainer}>
+      <View style={styles.heroSection}>
+        <Text style={styles.heroTitle}>Soluções Modulares de Segurança</Text>
+        <Text style={styles.heroSubtitle}>Escolha o pacote ideal para o seu condomínio ou empresa.</Text>
+      </View>
+
+      <View style={styles.contentSection}>
+        
+        {/* Renderiza os pacotes reestruturados */}
+        <PacotesServicos onOpenModal={handleOpenModal} />
+        
+        <View style={{ marginTop: 30 }}>
+          <Button
+            texto="Voltar para Home"
+            onPress={() => onNavigate('Home')}
+            fullWidth={true}
+          />
+        </View>
+      </View>
+      
+      {/* Modal de Contratação Rápida */}
+      <QuickHireModal 
+        isVisible={modalVisible} 
+        onClose={() => setModalVisible(false)} 
+        serviceName={selectedService}
+      />
+    </ScrollView>
+  );
+};
+
+
+// --- 11. PÁGINA DE AVALIAÇÃO DE RISCO (AvaliacaoScreen) ---
+const AvaliacaoScreen = ({ onNavigate }) => {
+    // ... (Mantido o código anterior de Avaliação de Risco)
+    const [nome, setNome] = useState('');
+    const [contato, setContato] = useState('');
+    const [cidade, setCidade] = useState(''); 
+    const [estado, setEstado] = useState(''); 
+    const [bairro, setBairro] = useState(''); 
+    const [enderecoAproximado, setEnderecoAproximado] = useState(''); 
+    const [tipoImovel, setTipoImovel] = useState('Condomínio Residencial'); 
+    const [outroTipo, setOutroTipo] = useState(''); 
+    const [populacao, setPopulacao] = useState('0-50'); 
+    const [nivelCriminalidade, setNivelCriminalidade] = useState('Baixo'); 
+    const [acessosPedestres, setAcessosPedestres] = useState('1'); 
+    const [acessosVeiculos, setAcessosVeiculos] = useState('1'); 
+    const [rondaAtual, setRondaAtual] = useState('Não'); 
+    const [tecnologiaAtual, setTecnologiaAtual] = useState('Nenhuma'); 
+    const [infoAdicional, setInfoAdicional] = useState('');
+    const [isOptionsModalVisible, setIsOptionsModalVisible] = useState(false);
+    
+    const opcoesTipoImovel = [
+        { label: 'Condomínio Residencial', value: 'Condomínio Residencial' },
+        { label: 'Condomínio Comercial', value: 'Condomínio Comercial' },
+        { label: 'Empresa / Indústria', value: 'Empresa / Indústria' },
+        { label: 'Outro Tipo', value: 'Outro' },
+    ];
+    const opcoesPopulacao = [{ label: '0-50', value: '0-50' }, { label: '50-150', value: '50-150' }, { label: '150+', value: '150+' }];
+    const opcoesCriminalidade = [{ label: 'Baixo', value: 'Baixo' }, { label: 'Médio', value: 'Médio' }, { label: 'Alto', value: 'Alto' }];
+    const opcoesAcessos = [{ label: '1', value: '1' }, { label: '2', value: '2' }, { label: '3+', value: '3+' }];
+    const opcoesSimNao = [{ label: 'Sim', value: 'Sim' }, { label: 'Não', value: 'Não' }];
+
+    const getDadosParaModal = () => ({
+        formatado: `
+*RELATÓRIO DE DIAGNÓSTICO DE SEGURANÇA MV PATRIMONIAL*
+
+Prezado(a) ${nome}, este é o resumo da sua avaliação de risco:
+
+--- 1. INFORMAÇÕES BÁSICAS ---
+*Contato:* ${contato}
+*Tipo de Imóvel:* ${tipoImovel}${tipoImovel === 'Outro' ? ` (${outroTipo})` : ''}
+
+*LOCALIZAÇÃO:* ${bairro}, ${cidade} - ${estado}
+*Endereço Aprox/Ref:* ${enderecoAproximado}
+
+--- 2. AVALIAÇÃO DE RISCO ---
+*Porte da População:* ${populacao}
+*Risco Regional:* ${nivelCriminalidade}
+*Acessos Pedestres/Veículos:* ${acessosPedestres} / ${acessosVeiculos}
+*Vigilância 24h Atual:* ${rondaAtual}
+*Tecnologia (Câmeras/Cerca):* ${tecnologiaAtual}
+
+--- 3. PREOCUPAÇÃO PRINCIPAL ---
+${infoAdicional || 'Nenhuma informação adicional fornecida.'}
+
+Aguardamos seu contato para agendar a consultoria!
+`,
+        mensagemInicial: `Olá! Sou ${nome} e gostaria de agendar uma consultoria da MV Segurança Patrimonial. Segue abaixo o resumo do diagnóstico prévio do meu imóvel para análise:`,
+        nome, contato, cidade, tipoImovel, outroTipo, populacao, nivelCriminalidade, acessosPedestres, acessosVeiculos, rondaAtual, tecnologiaAtual, infoAdicional
+    });
+
+
+    const handleSubmit = () => {
+        const destinatarioEmail = 'leonardogarbellini@gmail.com';
+        const telefoneSuporte = '5516993863222';
+        
+        // 1. Validação Mínima
+        if (!nome || !contato || !cidade || !estado || !bairro || !enderecoAproximado) { 
+            Alert.alert("Erro", "Por favor, preencha todos os campos obrigatórios na Seção 1.");
+            return;
+        }
+
+        // 2. Formatação dos Dados
+        const dados = getDadosParaModal();
+        const corpoMensagem = `${dados.mensagemInicial}\n\n${dados.formatado}`;
+        const assuntoEmail = `NOVO DIAGNÓSTICO DE SEGURANÇA - ${dados.cidade}`;
+        
+        // Lógica de Disparo Direto (E-mail)
+        Linking.openURL(`mailto:${destinatarioEmail}?subject=${encodeURIComponent(assuntoEmail)}&body=${encodeURIComponent(corpoMensagem)}`)
+          .then(() => {
+              // Após o sistema abrir o cliente de email, damos o feedback de sucesso.
+              Alert.alert(
+                  "E-mail Enviado!",
+                  "Seu diagnóstico foi enviado ao nosso consultor. Você será contatado em breve para agendar a consultoria.",
+                  [{ text: "OK", onPress: () => onNavigate('Rastreio') }]
+              );
+          })
+          .catch(() => {
+              // Fallback se o mailto falhar
+              Alert.alert(
+                  "Erro no E-mail",
+                  "Não foi possível abrir o aplicativo de e-mail. Por favor, envie o diagnóstico manualmente para leonardogarbellini@gmail.com ou ligue para (16) 99386-3222.",
+                  [{ text: "OK" }]
+              );
+          });
+    };
+
+
+    return (
+        <ScrollView style={styles.screenContainer}>
+        <View style={styles.heroSection}>
+            <AppIcon name="clipboard-text-outline" color={COLORS.textLight} size={40} style={{ marginBottom: 10 }} />
+            <Text style={styles.heroTitle}>Diagnóstico de Segurança Gratuito</Text>
+            <Text style={styles.heroSubtitle}>Responda a este breve questionário para que possamos mapear o risco do seu patrimônio e sugerir as melhores soluções.</Text>
+        </View>
+
+        <View style={styles.contentSection}>
+            
+            {/* --- 1. INFORMAÇÕES DE CONTATO --- */}
+            <Text style={styles.formTitle}>1. Informações Básicas e Localização</Text>
+            
+            <TextInput style={styles.input} placeholder="Seu Nome Completo (Obrigatório)" value={nome} onChangeText={setNome} />
+            <TextInput style={styles.input} placeholder="E-mail / Telefone (Obrigatório)" value={contato} onChangeText={setContato} keyboardType="email-address" />
+            
+            {/* NOVO: CAMPO TIPO DE IMÓVEL (Vertical Segmented Control) */}
+            <Text style={styles.inputLabel}>Qual o tipo principal de imóvel?</Text>
+            <VerticalSegmentedControl options={opcoesTipoImovel} selectedValue={tipoImovel} onValueChange={setTipoImovel} />
+            
+            {/* CAMPO CONDICIONAL: APARECE SE TIPO IMÓVEL FOR "Outro" */}
+            {tipoImovel === 'Outro' && (
+                <TextInput style={styles.input} placeholder="Especifique o tipo de imóvel (Obrigatório)" value={outroTipo} onChangeText={setOutroTipo} />
+            )}
+
+            {/* NOVO: CAMPOS DE ENDEREÇO SEPARADOS */}
+            <Text style={styles.inputLabel}>Localização (Obrigatório)</Text>
+            <TextInput style={styles.input} placeholder="Estado (Ex: SP)" value={estado} onChangeText={setEstado} />
+            <TextInput style={styles.input} placeholder="Cidade (Ex: Ribeirão Preto)" value={cidade} onChangeText={setCidade} />
+            <TextInput style={styles.input} placeholder="Bairro" value={bairro} onChangeText={setBairro} />
+            <TextInput style={styles.input} placeholder="Endereço / Referência (Aprox.)" value={enderecoAproximado} onChangeText={setEnderecoAproximado} />
+
+            {/* --- 2. PERGUNTAS DE RISCO E INFRAESTRUTURA --- */}
+            <Text style={styles.formTitle}>2. Avaliação de Risco e Infraestrutura</Text>
+            
+            <Text style={styles.inputLabel}>Qual o porte da população (Unidades/Funcionários) do local?</Text>
+            <SegmentedControl options={opcoesPopulacao} selectedValue={populacao} onValueChange={setPopulacao} />
+            
+            <Text style={styles.inputLabel}>Como você avalia o nível de criminalidade na região?</Text>
+            <SegmentedControl options={opcoesCriminalidade} selectedValue={nivelCriminalidade} onValueChange={setNivelCriminalidade} />
+            
+            <Text style={styles.inputLabel}>Quantos acessos dedicados para pedestres o local possui?</Text>
+            <SegmentedControl options={opcoesAcessos} selectedValue={acessosPedestres} onValueChange={setAcessosPedestres} />
+            
+            <Text style={styles.inputLabel}>Quantos acessos dedicados para veículos o local possui?</Text>
+            <SegmentedControl options={opcoesAcessos} selectedValue={acessosVeiculos} onValueChange={setAcessosVeiculos} />
+
+            <Text style={styles.inputLabel}>Possui câmeras de monitoramento e/ou cerca elétrica atualmente?</Text>
+            <SegmentedControl options={opcoesSimNao} selectedValue={tecnologiaAtual} onValueChange={setTecnologiaAtual} />
+            
+            <Text style={styles.inputLabel}>Atualmente, o local possui algum tipo de vigilância/ronda 24h?</Text>
+            <SegmentedControl options={opcoesSimNao} selectedValue={rondaAtual} onValueChange={setRondaAtual} />
+            
+            {/* --- 3. NECESSIDADES ADICIONAIS (Simplificado) --- */}
+            <Text style={styles.formTitle}>3. Outras Necessidades</Text>
+            
+            <Text style={styles.inputLabel}>Informações Adicionais / Foco de Preocupação:</Text>
+            <TextInput style={styles.textArea} placeholder="Descreva brevemente sua principal preocupação de segurança (Ex: Ponto de fuga, Falta de controle de visitantes)." value={infoAdicional} onChangeText={setInfoAdicional} multiline={true} numberOfLines={4} />
+            
+            <Button texto="Enviar Diagnóstico e Agendar Consultoria" onPress={handleSubmit} fullWidth={true} customStyle={{ marginTop: 25, backgroundColor: COLORS.danger }} />
+            
+            <View style={{ marginTop: 20 }}>
+            <Button texto="Voltar" onPress={() => onNavigate('Home')} fullWidth={true} customStyle={{ backgroundColor: COLORS.textDark }} />
+            </View>
+
+        </View>
+        
+        {/* O ContactOptionsModal foi removido para implementar o disparo direto. */}
+        </ScrollView>
+    );
+};
+
+
+// --- 12. PÁGINA DE RASTREIO DE SERVIÇOS (RastreioScreen) ---
+const RastreioScreen = ({ onNavigate }) => {
+    // ... (Mantido o código anterior de Rastreio de Serviços)
+    const rastreioStatus = [
+        { 
+          label: '1. Solicitação Enviada', 
+          date: '23/Out', 
+          icon: 'send-check', 
+          active: true,
+          description: 'Seu pedido foi registrado. Agora a MV vai analisar suas necessidades iniciais.',
+        },
+        { 
+          label: '2. Consultor Designado', 
+          date: 'Em Breve', 
+          icon: 'account-tie', 
+          active: true,
+          description: 'Um especialista foi escolhido e fará contato em breve para agendar as próximas etapas.',
+        },
+        { 
+          label: '3. Diagnóstico de Risco (Visita)', 
+          date: 'A Agendar', 
+          icon: 'clipboard-list-outline', 
+          active: false,
+          description: 'É necessário agendar uma visita ao seu imóvel para a análise técnica de segurança.',
+        },
+        { 
+          label: '4. Proposta Finalizada', 
+          date: 'Aguardando', 
+          icon: 'check-decagram', 
+          active: false,
+          description: 'A proposta comercial com soluções e valores está pronta para ser apresentada.',
+        },
+      ];
+    
+      return (
+        <ScrollView style={styles.screenContainer}>
+          <View style={styles.heroSection}>
+            <AppIcon name="truck-fast-outline" color={COLORS.textLight} size={40} style={{ marginBottom: 10 }} />
+            <Text style={styles.heroTitle}>Rastreio do Seu Pedido</Text>
+            <Text style={styles.heroSubtitle}>Acompanhe o progresso da sua consultoria de segurança.</Text>
+          </View>
+    
+          <View style={styles.contentSection}>
+            <Text style={styles.contentTitle}>Etapas Ativas</Text>
+            
+            {rastreioStatus.map((status, index) => (
+              <View key={index} style={styles.rastreioItem}>
+                <View style={[styles.rastreioIconCircle, status.active && { backgroundColor: COLORS.primary }]}>
+                  <AppIcon name={status.icon} color={COLORS.textLight} size={24} style={{}} />
+                </View>
+                <View style={styles.rastreioDetails}>
+                  <Text style={styles.rastreioLabel}>{status.label}</Text>
+                  <Text style={styles.rastreioDescription}>{status.description}</Text>
+                  <Text style={styles.rastreioDate}>{status.date}</Text>
+                </View>
+                {/* Linha vertical (conectora) */}
+                {index < rastreioStatus.length - 1 && (
+                  <View style={[styles.rastreioLine, status.active && { backgroundColor: COLORS.primary }]} />
+                )}
+              </View>
+            ))}
+    
+            <Text style={[styles.cardText, {marginTop: 30}]}>
+              *Este rastreio é uma simulação. Para status real, entre em contato com seu consultor designado.
+            </Text>
+            
+            <View style={{ marginTop: 30 }}>
+              <Button
+                texto="Voltar para Home"
+                onPress={() => onNavigate('Home')}
+                fullWidth={true}
+                customStyle={{ backgroundColor: COLORS.textDark }}
+              />
+            </View>
+          </View>
+        </ScrollView>
+      );
+};
+
+
+// --- 13. PÁGINA: HOME (HomeScreen) ---
+const DestaquesConfianca = () => {
+    // ... (Mantido o código anterior de Destaques de Confiança)
+    const destaques = [
+        { value: '8+', label: 'Anos de Experiência', icon: 'check-decagram' }, // TEXTO ALTERADO
+        { value: '20+', label: 'Condomínios Protegidos', icon: 'account-multiple-check' }, 
+        { value: 'Região', label: 'Ribeirão e Região', icon: 'map-marker-radius' }, 
+      ];
+    
+      return (
+        <View style={styles.destaqueContainer}>
+          {destaques.map((item, index) => (
+            <View key={index} style={styles.destaqueItem}>
+              <AppIcon name={item.icon} color={COLORS.primary} size={36} style={{ marginBottom: 5 }}/>
+              <Text style={styles.destaqueValue}>{item.value}</Text>
+              <Text style={styles.destaqueLabel}>{item.label}</Text>
+            </View>
+          ))}
+        </View>
+      );
+};
+
+const CondominiosAtendidos = () => {
+    // CORRIGIDO: Removido o parêntese extra no fontWeight
+    return (
+        <View style={styles.condominioSection}>
+          <AppIcon name="home" color={COLORS.primary} size={30} style={{ marginBottom: 10 }} />
+          <Text style={styles.condominioTitle}>Foco na Segurança de Condomínios</Text>
+          <Text style={styles.condominioText}>
+            Atuamos em mais de <Text style={{fontWeight: 'bold'}}>20 condomínios</Text> residenciais e empresariais nas regiões de <Text style={{fontWeight: 'bold'}}>Ribeirão Preto</Text> e <Text style={{fontWeight: 'bold'}}>Serrana</Text>. 
+            Conheça nossas soluções exclusivas para proteção de áreas comuns e privadas.
+          </Text>
+        </View>
+      );
+};
+
+const HomeScreen = ({ onNavigate }) => {
+  return (
+    <ScrollView style={styles.screenContainer}>
+      <View style={styles.heroSection}>
+        <Text style={styles.heroTitle}>Segurança Patrimonial de Alta Performance</Text>
+        <Text style={styles.heroSubtitle}>Proteção 24h, Inovação e Confiança.</Text>
+        <Button
+          texto="Contratar Agora"
+          iconName="shield"
+          onPress={() => onNavigate('Servicos')} 
+          fullWidth={true}
+          customStyle={{ marginTop: 20 }}
+        />
+      </View>
+      
+      {/* Seção 1: Destaques de Confiança (COM AS NOVAS MÉTRICAS) */}
+      <View style={styles.contentSection}>
+        {/* TEXTO ALTERADO AQUI */}
+        <Text style={styles.contentTitle}>Os números apenas confirmam o que fazemos de melhor!</Text> 
+        <DestaquesConfianca />
+      </View>
+
+      {/* SEÇÃO CONDOMÍNIOS (MANTIDA) */}
+      <CondominiosAtendidos />
+
+      {/* Seção 2: Serviços em Destaque e Carreiras */}
+      <View style={styles.contentSection}>
+        <Text style={styles.contentTitle}>O Que Oferecemos</Text>
+        <Text style={styles.cardText}>Vigilância, portaria, manutenção e asseio. Clique no botão abaixo para ver o portfólio completo.</Text>
+        
+        <View style={{ marginTop: 20 }}>
+          <Button
+            texto="Ver Serviços Detalhados"
+            onPress={() => onNavigate('Servicos')}
+            fullWidth={true}
+          />
+        </View>
+
+        <View style={{ marginTop: 20 }}>
+          <Button
+            texto="Rastrear Minha Solicitação" 
+            onPress={() => onNavigate('Rastreio')}
+            fullWidth={true}
+            customStyle={{ backgroundColor: COLORS.textDark }} 
+          />
+        </View>
+      </View>
+      
+      {/* Seção 3: CTA Final - Avaliação Gratuita */}
+      <View style={styles.ctaSection}>
+        <Text style={styles.ctaTitle}>Avaliação de Risco Gratuita</Text>
+        <Text style={styles.ctaSubtitle}>Descubra as vulnerabilidades do seu patrimônio com nossos especialistas.</Text>
+        <Button
+          texto="Agendar Consultoria"
+          onPress={() => onNavigate('Avaliacao')} 
+          fullWidth={true}
+          customStyle={{ marginTop: 15, backgroundColor: COLORS.danger }} 
+        />
+      </View>
+      
+    </ScrollView>
+  );
+};
+
+
+// --- 14. COMPONENTE PRINCIPAL DO APP (App) ---
+
+export default function App() {
+  const [currentScreen, setCurrentScreen] = useState('Home'); 
+  const [isMenuOpen, setIsMenuOpen] = useState(false); 
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  const handleNavigate = (screenName) => {
+    setCurrentScreen(screenName);
+  };
+  
+  const handleLogin = () => {
+    setIsLoggedIn(true);
+    setCurrentScreen('Home');
+  };
+
+  const handleLogout = async () => {
+    setIsLoggedIn(false);
+    // Na prática, você limparia o token de autenticação aqui
+    Alert.alert("Sessão Encerrada", "Você saiu do Portal.", [{text: "OK"}]); // TEXTO ALTERADO
+    setCurrentScreen('Home');
+  };
+
+
+  const renderScreen = () => {
+    if (currentScreen === 'Servicos') {
+      return <ServicosScreen onNavigate={handleNavigate} />;
+    }
+    if (currentScreen === 'Carreiras') {
+      return <CarreirasScreen onNavigate={handleNavigate} />;
+    }
+    if (currentScreen === 'Avaliacao') { 
+      return <AvaliacaoScreen onNavigate={handleNavigate} />;
+    }
+    if (currentScreen === 'Rastreio') { 
+      return <RastreioScreen onNavigate={handleNavigate} />;
+    }
+    if (currentScreen === 'ChatBot') { 
+        return <ChatBotScreen onNavigate={handleNavigate} />;
+    }
+    if (currentScreen === 'Login') { 
+        return <LoginScreen onNavigate={handleNavigate} onLogin={handleLogin} />;
+    }
+    return <HomeScreen onNavigate={handleNavigate} />;
+  };
+
+  return (
+    <View style={styles.mainWrapper}>
+      <Header onNavigate={handleNavigate} onOpenMenu={() => setIsMenuOpen(true)} />
+      <View style={styles.contentWrapper}>
+        {renderScreen()}
+      </View>
+      <Footer />
+      <SideMenuModal 
+        isVisible={isMenuOpen} 
+        onClose={() => setIsMenuOpen(false)} 
+        onNavigate={handleNavigate}
+        isLoggedIn={isLoggedIn}
+        onLogout={handleLogout}
+      />
+    </View>  
+  );
+}
+
+
+// --- 15. ESTILOS NATIVOS (Stylesheets) ---
+
+const styles = StyleSheet.create({
+  mainWrapper: {
+    flex: 1,
+    backgroundColor: COLORS.backgroundLight,
+  },
+  contentWrapper: {
+    flex: 1,
+  },
+  // --- Header & Menu ---
+  safeAreaHeader: {
+    backgroundColor: COLORS.textLight,
+    paddingTop: Platform.OS === 'android' ? 24 : 0, 
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between', 
+    alignItems: 'center',
+    padding: 15,
+    backgroundColor: COLORS.textLight,
+  },
+  menuIconContainer: {
+    width: 40, 
+    alignItems: 'flex-start',
+  },
+  headerButtonsPlaceholder: {
+    width: 40, 
+  },
+  logoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1, 
+    justifyContent: 'center',
+  },
+  logoTextHeader: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+    textAlign: 'center',
+  },
+  // Side Menu Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-start',
+  },
+  sideMenuWrapper: {
+    width: SIDE_MENU_WIDTH,
+    maxWidth: '75%',
+    backgroundColor: COLORS.textLight,
+    height: '100%',
+  },
+  sideMenu: {
+    flex: 1,
+    paddingTop: 10,
+  },
+  sideMenuHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    paddingTop: Platform.OS === 'android' ? 10 : 0, 
+  },
+  sideMenuTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  sideMenuTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+  },
+  sideMenuCloseButton: {
+    position: 'absolute', 
+    top: 10,
+    right: 10,
+    padding: 5,
+    zIndex: 10,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  menuItemText: {
+    fontSize: 16,
+    color: COLORS.textDark,
+  },
+  // --- Botão ---
+  buttonBase: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  buttonText: {
+    color: COLORS.textLight,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  // --- Seções (Geral) ---
+  screenContainer: {
+    flex: 1,
+  },
+  heroSection: {
+    backgroundColor: COLORS.primary,
+    padding: 30,
+    alignItems: 'center',
+  },
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: COLORS.textLight,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  heroSubtitle: {
+    fontSize: 18,
+    color: COLORS.textLight,
+    textAlign: 'center',
+    opacity: 0.9,
+  },
+  contentSection: {
+    padding: 20,
+  },
+  contentTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.textDark,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  // Destaques de Confiança
+  destaqueContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 20,
+  },
+  destaqueItem: {
+    alignItems: 'center',
+    width: '30%',
+    padding: 10,
+    backgroundColor: COLORS.textLight,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    elevation: 1,
+    borderTopWidth: 2,
+    borderTopColor: COLORS.primary,
+  },
+  destaqueValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+  },
+  destaqueLabel: {
+    fontSize: 12,
+    textAlign: 'center',
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  // Condomínios Atendidos Section
+  condominioSection: {
+    padding: 20,
+    backgroundColor: '#e3f2fd', 
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  condominioTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.textDark,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  condominioText: {
+    fontSize: 14,
+    color: '#374151',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  // Card Service
+  cardService: {
+    backgroundColor: COLORS.textLight,
+    padding: 18,
+    borderRadius: 10,
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+    alignItems: 'center',
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.textDark,
+    marginTop: 5,
+    marginBottom: 5,
+    textAlign: 'center',
+  },
+  cardText: {
+    fontSize: 14,
+    color: '#6b7280', 
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  // --- Formulário Geral ---
+  formTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+    marginTop: 15,
+    marginBottom: 10,
+  },
+  inputLabel: { 
+    fontSize: 14,
+    color: COLORS.textDark,
+    marginBottom: 5,
+    fontWeight: '600',
+  },
+  input: {
+    height: 50,
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    marginBottom: 15,
+    backgroundColor: COLORS.textLight,
+    fontSize: 16,
+  },
+  textArea: {
+    height: 100,
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    paddingTop: 15,
+    marginBottom: 15,
+    backgroundColor: COLORS.textLight,
+    fontSize: 16,
+    textAlignVertical: 'top',
+  },
+  // --- Segmented Control Horizontal Styles ---
+  segmentedControlContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between', 
+    marginBottom: 15,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: COLORS.textLight, 
+    borderWidth: 1,
+    borderColor: COLORS.primary, 
+  },
+  segmentedControlOption: {
+    paddingVertical: 10, 
+    paddingHorizontal: 5, 
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 1, 
+  },
+  segmentedControlSelected: {
+    backgroundColor: COLORS.primary, 
+    borderRadius: 7, 
+  },
+  segmentedControlText: {
+    fontSize: 13, 
+    fontWeight: '600',
+    textAlign: 'center', 
+  },
+  // --- Segmented Control Vertical Styles (NOVO) ---
+  verticalSegmentedControlContainer: {
+    flexDirection: 'column', 
+    marginBottom: 15,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.textLight,
+  },
+  verticalSegmentedControlOption: {
+    width: '100%',
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    alignItems: 'flex-start', 
+    justifyContent: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  verticalSegmentedControlSelected: {
+    backgroundColor: COLORS.primary, 
+    borderLeftWidth: 5,
+    borderLeftColor: COLORS.primary, 
+  },
+  verticalSegmentedControlText: {
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'left',
+  },
+  // --- Modal de Contratação Rápida ---
+  modalCenteredView: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  modalView: {
+    width: '90%',
+    backgroundColor: COLORS.textLight,
+    borderRadius: 15,
+    padding: 25,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: COLORS.textDark,
+    marginBottom: 5,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 16,
+    color: '#6b7280',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  inputModal: {
+    height: 45,
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    marginBottom: 15,
+    backgroundColor: '#f9fafb',
+    fontSize: 15,
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    padding: 5,
+    zIndex: 10,
+  },
+  // --- Rastreio de Serviços (Novo) ---
+  rastreioItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 25,
+    position: 'relative',
+  },
+  rastreioIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#ccc', 
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+    marginRight: 15,
+  },
+  rastreioDetails: {
+    flex: 1,
+  },
+  rastreioLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.textDark,
+  },
+  rastreioDescription: { 
+    fontSize: 13,
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  rastreioDate: {
+    fontSize: 12, 
+    color: '#9ca3af', 
+    marginTop: 5,
+  },
+  rastreioLine: {
+    position: 'absolute',
+    left: 19, 
+    top: 40,
+    bottom: -25,
+    width: 2,
+    backgroundColor: '#ccc', 
+  },
+  // --- Chatbot IA (Novo) ---
+  chatHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 15,
+    backgroundColor: COLORS.primary,
+    elevation: 4,
+  },
+  chatTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.textLight,
+  },
+  chatContent: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  messageContainer: {
+    maxWidth: '80%',
+    padding: 10,
+    borderRadius: 15,
+    marginBottom: 10,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  userMessageContainer: {
+    backgroundColor: COLORS.primary,
+    alignSelf: 'flex-end',
+    borderBottomRightRadius: 2,
+  },
+  aiMessageContainer: {
+    backgroundColor: COLORS.textLight,
+    alignSelf: 'flex-start',
+    borderBottomLeftRadius: 2,
+  },
+  userMessageText: {
+    color: COLORS.textLight,
+    fontSize: 15,
+  },
+  aiMessageText: {
+    color: COLORS.textDark,
+    fontSize: 15,
+  },
+  chatInputContainer: {
+    flexDirection: 'row',
+    padding: 10,
+    borderTopWidth: 1,
+    borderColor: '#ccc',
+    backgroundColor: COLORS.textLight,
+  },
+  chatInput: {
+    flex: 1,
+    height: 40,
+    borderColor: '#eee',
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    marginRight: 10,
+    backgroundColor: '#f9fafb',
+  },
+  chatSendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // --- Login Screen (Novo) ---
+  authContainer: {
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: COLORS.textLight,
+    borderRadius: 15,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
+    marginTop: 40,
+  },
+  authTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.textDark,
+    marginBottom: 5,
+  },
+  authSubtitle: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  toggleText: {
+    color: COLORS.primary,
+    textDecorationLine: 'underline',
+    fontSize: 14,
+  },
+  // Password Indicator Styles (NOVOS)
+  passwordIndicatorContainer: {
+    width: '100%',
+    marginTop: 5, // Aumenta a margem do topo para sair de baixo do TextInput
+    marginBottom: 15,
+    paddingHorizontal: 5,
+  },
+  passwordBarBackground: {
+    height: 6,
+    width: '100%',
+    backgroundColor: '#e0e0e0',
+    borderRadius: 3,
+    marginBottom: 5,
+    position: 'relative', // Mantém a barra como referência
+  },
+  passwordBar: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  passwordIndicatorText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    textAlign: 'right',
+    marginTop: 1, // Alinha o texto logo abaixo da barra
+    position: 'relative', // Para o texto fluir com o layout
+  },
+  passwordBarContainer: { // Novo container para alinhar barra e texto de força
+    flexDirection: 'column', // Alterado para coluna para o texto ficar abaixo
+    marginBottom: 5,
+    height: 25, // Dá espaço suficiente para a barra e o texto flutuante
+    justifyContent: 'flex-start', // Alinha o conteúdo ao topo
+  },
+  passwordRequirements: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    marginTop: 5,
+  },
+  requirementItem: {
+    fontSize: 12,
+    color: '#6b7280',
+    width: '48%', // Distribui em duas colunas
+    marginBottom: 3,
+    alignItems: 'center', // Para alinhar o check/x com o texto
+  },
+  requirementText: { // Novo estilo para o texto do requisito
+    fontSize: 14,
+    color: COLORS.textDark,
+  },
+  // Input com ícone
+  inputGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    height: 50,
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 8,
+    marginBottom: 15,
+    backgroundColor: COLORS.textLight,
+  },
+  inputWithIcon: {
+    flex: 1,
+    height: '100%',
+    paddingHorizontal: 15,
+    fontSize: 16,
+  },
+  eyeButton: {
+    padding: 10,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    height: '100%',
+    justifyContent: 'center',
+  },
+  errorText: {
+    fontSize: 13,
+    color: COLORS.danger,
+    marginBottom: 10,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 5,
+    marginTop: -10,
+  },
+  // --- Pacotes de Serviço ---
+  pacotesContainer: {
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  pacoteCard: {
+    width: '100%',
+    backgroundColor: COLORS.textLight,
+    padding: 20,
+    borderRadius: 15,
+    marginBottom: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  pacoteNome: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.textDark,
+    marginBottom: 5,
+  },
+  pacotePreco: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: COLORS.primary,
+    marginBottom: 15,
+  },
+  pacoteDescricao: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  servicosLista: {
+    width: '100%',
+    paddingHorizontal: 10,
+    marginBottom: 10,
+  },
+  servicoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  servicoTexto: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: COLORS.textDark,
+  },
+  // CTA Final
+  ctaSection: {
+    backgroundColor: COLORS.textDark,
+    padding: 30,
+    alignItems: 'center',
+  },
+  ctaTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: COLORS.textLight,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  ctaSubtitle: {
+    fontSize: 16,
+    color: '#ccc',
+    textAlign: 'center',
+    marginBottom: 15,
+  },
+  // Footer
+  footer: {
+    padding: 15,
+    backgroundColor: COLORS.textDark, // Usando textDark para o footer
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  footerText: {
+    color: '#d1d5db', 
+    fontSize: 10,
+    textAlign: 'center',
+  },
+});
