@@ -1,7 +1,3 @@
-// App.js - MV SEGURANÇA PATRIMONIAL MOBILE
-// Gemini: VERSÃO FINAL COM FLUXO DE ENVIO AUTOMATIZADO DIRETO PARA EMAIL.
-// MUDANÇA CRÍTICA: O botão 'Enviar Diagnóstico' agora dispara o link mailto (E-mail) diretamente,
-// sem o modal de escolha (ContactOptionsModal foi removido).
 
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Linking, StyleSheet, Image, Platform, Alert, SafeAreaView, Modal, TextInput, Dimensions, KeyboardAvoidingView } from 'react-native';
